@@ -48,8 +48,6 @@ const char* ssid = "------";
 const char* password = "********";
 
 unsigned long wateringPeriod = (WATERAMOUNT * 60 * 60 * 1000) / PUMPCAPACITY; // milliseconds
-unsigned long muurOnTime;
-unsigned long railOnTime;
 double BatteryVoltage;
 int uptime;
 
@@ -90,9 +88,9 @@ BLYNK_WRITE(V3)
   if (value > 0) {
     // switch on both pumps
     Blynk.virtualWrite(V0, 1);
-    pumpOn(pump[0]);
+    pumpOn(pump[MUUR]);
     Blynk.virtualWrite(V1, 1);
-    pumpOn(pump[1]);
+    pumpOn(pump[HEK]);
     Blynk.virtualWrite(V3, 0);
   }
 }
@@ -143,7 +141,7 @@ double ReadAverage(byte pin) {
 
 void updateVoltage() {
   double BatteryVoltage = ReadAverage(ADCVoltagePin) * ((R1 + R2)/R2) * CORRECTION;
-  Serial.printf("Battery Voltage: %4.2f V (low)\n", BatteryVoltage, batteryLow ? "" : "not ");
+  Serial.printf("Battery Voltage: %4.2f V (%slow)\n", BatteryVoltage, batteryLow ? "" : "not ");
   Blynk.virtualWrite(V2, BatteryVoltage);
   if (batteryLow) {
     if (BatteryVoltage > LOWVOLTAGE + HYSTERESIS) {
@@ -164,11 +162,11 @@ void myTimerEvent()
 {
   uptime++;
   bool canSleep = (uptime > 3);
-  Serial.printf("up %d s.", uptime);
+  Serial.printf("up %d s\n.", uptime);
   Blynk.virtualWrite(V5, makeTimeString(awakeSeconds + uptime));
   uint16_t ADCreading = analogRead(ADCVoltagePin);
   if (ADCreading < 10) {
-    Serial.printf("read %d. Battery not connected", ADCreading);
+    Serial.printf("read %d. Battery not connected\n", ADCreading);
   } else {
     updateVoltage();
   }
