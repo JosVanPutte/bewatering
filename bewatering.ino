@@ -190,6 +190,7 @@ void myTimerEvent()
     Serial.printf("Going to sleep now for %d sec\n", TIME_TO_SLEEP);
     Serial.flush();
     Blynk.virtualWrite(V4, 0);
+    digitalWrite(LED_BUILTIN, LOW);
     delay(200);
     esp_deep_sleep_start();
   }
@@ -223,6 +224,8 @@ String makeTimeString(unsigned long units) {
 
 void setup() {
   Serial.begin(115200);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
   Blynk.virtualWrite(V4, 1);
   Serial.printf("pump capacity %d L/H. Wateringamount %d L --> %d seconds on.\n", PUMPCAPACITY, WATERAMOUNT, wateringPeriod / 1000);
