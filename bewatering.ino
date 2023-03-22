@@ -27,6 +27,7 @@ PUMP pump[PUMPS] = {
 #define PUMPCAPACITY 240 // liter per hour
 #define HYSTERESIS 0.5 // volt
 #define LOWVOLTAGE 10.8
+#define ADCREADS 3
 
 /**
  * There is a voltage reducing resistor pair
@@ -53,7 +54,7 @@ int uptime;
 
 // RTC_DATA vars are preserved during the sleep
 RTC_DATA_ATTR bool batteryLow;
-RTC_DATA_ATTR uint16_t v[3]; // 3 battery voltage readings
+RTC_DATA_ATTR uint16_t v[ADCREADS]; // 3 battery voltage readings
 
 RTC_DATA_ATTR unsigned long sleepSeconds;
 RTC_DATA_ATTR unsigned long awakeSeconds;
@@ -115,7 +116,7 @@ void pumpOff(PUMP& p) {
 }
 
 void updateVoltage() {
-  double BatteryVoltage = ReadAverage(v, 3, analogRead(ADCVoltagePin)) * ((R1 + R2)/R2) * CORRECTION;
+  double BatteryVoltage = ReadAverage(v, ADCREADS, analogRead(ADCVoltagePin)) * ((R1 + R2)/R2) * CORRECTION;
   Serial.printf("Battery Voltage: %4.2f V (%slow)\n", BatteryVoltage, batteryLow ? "" : "not ");
   Blynk.virtualWrite(V2, BatteryVoltage);
   if (batteryLow) {
@@ -132,7 +133,7 @@ void updateVoltage() {
   }
 }
 bool batteryConnected() {
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < ADCREADS; i++) {
     if (v[i] == 0) return false;
   }
   return true;
