@@ -1,11 +1,11 @@
 #define BLYNK_TEMPLATE_ID "TMPLE44qhOY2"
 #define BLYNK_TEMPLATE_NAME "Bewatering"
-#define BLYNK_AUTH_TOKEN "*************************"
-
-#define BLYNK_PRINT Serial
+#define BLYNK_AUTH_TOKEN "-----------------------"
 
 #include <WiFi.h>
 #include <BlynkSimpleEsp32.h>
+#include "ReadADC.h"
+#include "GetTime.h"
 
 typedef struct {
   String name; // the name
@@ -22,7 +22,6 @@ PUMP pump[PUMPS] = {
 };
 
 #define US_TO_S 1000000ULL
-#define TIME_TO_SLEEP 30
 
 #define WATERAMOUNT 1 // liter
 #define PUMPCAPACITY 240 // liter per hour
@@ -44,20 +43,17 @@ PUMP pump[PUMPS] = {
 
 #define ADCVoltagePin 35  // GPIO 35 (Analog input, ADC1_CH7))
 
-const char* ssid = "------";
-const char* password = "********";
+const char* ssid = "-----";
+const char* password = "*******";
 
 unsigned long wateringPeriod = (WATERAMOUNT * 60 * 60 * 1000) / PUMPCAPACITY; // milliseconds
+unsigned long secondsToSleep = 30; // default sleep half a minute
 double BatteryVoltage;
 int uptime;
 
-/**
- * we use the average of 4 measurements of the voltage
- **/
-RTC_DATA_ATTR uint16_t v2;
-RTC_DATA_ATTR uint16_t v1;
-RTC_DATA_ATTR uint16_t v0;
+// RTC_DATA vars are preserved during the sleep
 RTC_DATA_ATTR bool batteryLow;
+RTC_DATA_ATTR uint16_t v[3]; // 3 battery voltage readings
 
 RTC_DATA_ATTR unsigned long sleepSeconds;
 RTC_DATA_ATTR unsigned long awakeSeconds;
@@ -94,10 +90,11 @@ BLYNK_WRITE(V3)
     Blynk.virtualWrite(V3, 0);
   }
 }
+
 // This function is called every time the device is connected to the Blynk.Cloud
 BLYNK_CONNECTED()
 {
-  Serial.println("OK");
+  Serial.printf("Connected at %s", getTimeStr().c_str());
 }
 
 /**
@@ -117,30 +114,8 @@ void pumpOff(PUMP& p) {
   p.timeOn = 0;
 }
 
-// ReadADC is used to improve the linearity of the ESP32 ADC see: https://github.com/G6EJD/ESP32-ADC-Accuracy-Improvement-function
-double ReadADC(uint16_t reading) {
-  if (reading >= 1 && reading <= 4095) {
-    double polyVal = -0.000000000000016 * pow(reading,4) + 0.000000000118171 * pow(reading,3)- 0.000000301211691 * pow(reading,2)+ 0.001109019271794 * reading + 0.034143524634089;
-    if (polyVal > 0.0) {
-      return polyVal;
-    }
-  }
-  return 0.0;
-}
-
-//*****************************************************************************
-double ReadAverage(byte pin) {
-  uint16_t v3 = v2;
-  v2 = v1;
-  v1 = v0;
-  v0 = analogRead(pin);
-  double average = (ReadADC(v0) + ReadADC(v1) + ReadADC(v2) + ReadADC(v3)) / 4;
-  Serial.printf("Average voltage %4.3f\n", average );
-  return average;
-}
-
 void updateVoltage() {
-  double BatteryVoltage = ReadAverage(ADCVoltagePin) * ((R1 + R2)/R2) * CORRECTION;
+  double BatteryVoltage = ReadAverage(v, 3, analogRead(ADCVoltagePin)) * ((R1 + R2)/R2) * CORRECTION;
   Serial.printf("Battery Voltage: %4.2f V (%slow)\n", BatteryVoltage, batteryLow ? "" : "not ");
   Blynk.virtualWrite(V2, BatteryVoltage);
   if (batteryLow) {
@@ -153,23 +128,30 @@ void updateVoltage() {
       batteryLow = true;
       Serial.println("Battery low now");
       Blynk.logEvent("low_battery");
-      uptime = 0;
     }
   }
+}
+bool batteryConnected() {
+  for (int i = 0; i < 3; i++) {
+    if (v[i] == 0) return false;
+  }
+  return true;
 }
 // This function is called every second when awake.
 void myTimerEvent()
 {
-  uptime++;
-  bool canSleep = (uptime > 3);
-  Serial.printf("up %d s\n.", uptime);
+  uptime = millis() / 1000;
+  bool canSleep = (uptime > 1);
+  Serial.printf("up %d s.\n", uptime);
   Blynk.virtualWrite(V5, makeTimeString(awakeSeconds + uptime));
-  uint16_t ADCreading = analogRead(ADCVoltagePin);
-  if (ADCreading < 10) {
-    Serial.printf("read %d. Battery not connected\n", ADCreading);
-  } else {
-    updateVoltage();
+  if (!batteryConnected()) {
+    if (!batteryLow) {
+      Serial.printf("Battery not connected. Not sleeping.\n");
+      batteryLow = true;
+    }
+    canSleep = false;
   }
+  updateVoltage();
   for (int p = 0; p < PUMPS; p++) {
     unsigned long timeOn = pump[p].timeOn;
     // this pump is on
@@ -185,9 +167,9 @@ void myTimerEvent()
     }
   }
   if (canSleep) {
-    awakeSeconds += uptime;
-    sleepSeconds += TIME_TO_SLEEP;
-    Serial.printf("Going to sleep now for %d sec\n", TIME_TO_SLEEP);
+    awakeSeconds += millis() / 1000;
+    sleepSeconds += secondsToSleep;
+    Serial.printf("Going to sleep now for %d sec\n", secondsToSleep);
     Serial.flush();
     Blynk.virtualWrite(V4, 0);
     digitalWrite(LED_BUILTIN, LOW);
@@ -224,11 +206,11 @@ String makeTimeString(unsigned long units) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.printf("pump capacity %d L/H. Wateringamount %d L --> %d seconds on.\n", PUMPCAPACITY, WATERAMOUNT, wateringPeriod / 1000);
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
   Blynk.virtualWrite(V4, 1);
-  Serial.printf("pump capacity %d L/H. Wateringamount %d L --> %d seconds on.\n", PUMPCAPACITY, WATERAMOUNT, wateringPeriod / 1000);
   for (int p = 0; p < PUMPS; p++) {
     // before setting the pinmode set the output high (low is active)
     digitalWrite(pump[p].pin, HIGH);
@@ -240,12 +222,15 @@ void setup() {
   Blynk.virtualWrite(V6, makeTimeString(sleepSeconds));
   // myTimerEvent to be called every second
   timer.setInterval(1000L, myTimerEvent);
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * US_TO_S);
-  Serial.printf("set wakeup timer for %d seconds.\n", TIME_TO_SLEEP);
+  if (atNight()) {
+    Serial.println("It is night so sleep for an hour.");
+    secondsToSleep = 3600; // an hour
+  }
+  esp_sleep_enable_timer_wakeup(secondsToSleep * US_TO_S);
+  Serial.printf("set wakeup timer for %d seconds.\n", secondsToSleep);
 }
 
 void loop() {
   Blynk.run();
   timer.run();
 }
-
