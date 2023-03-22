@@ -3,7 +3,6 @@
 
 #define CET 3600 // CET is one hour later than UTC
 
-void syncTime();
 bool synced;
 
 void getAndCheckTime(struct tm& info) {
