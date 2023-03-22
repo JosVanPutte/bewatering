@@ -52,6 +52,7 @@ double BatteryVoltage;
 int uptime;
 
 #define ADCREADS 3
+// RTC_DATA vars are preserved during the sleep
 RTC_DATA_ATTR bool batteryLow;
 RTC_DATA_ATTR uint16_t v[ADCREADS];
 
