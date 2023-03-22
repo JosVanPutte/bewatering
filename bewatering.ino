@@ -1,6 +1,6 @@
 #define BLYNK_TEMPLATE_ID "TMPLE44qhOY2"
 #define BLYNK_TEMPLATE_NAME "Bewatering"
-#define BLYNK_AUTH_TOKEN "-----------------------"
+#define BLYNK_AUTH_TOKEN "---------------------------"
 
 #include <WiFi.h>
 #include <BlynkSimpleEsp32.h>
@@ -27,7 +27,6 @@ PUMP pump[PUMPS] = {
 #define PUMPCAPACITY 240 // liter per hour
 #define HYSTERESIS 0.5 // volt
 #define LOWVOLTAGE 10.8
-#define ADCREADS 3
 
 /**
  * There is a voltage reducing resistor pair
@@ -44,7 +43,7 @@ PUMP pump[PUMPS] = {
 
 #define ADCVoltagePin 35  // GPIO 35 (Analog input, ADC1_CH7))
 
-const char* ssid = "-----";
+const char* ssid = "------";
 const char* password = "*******";
 
 unsigned long wateringPeriod = (WATERAMOUNT * 60 * 60 * 1000) / PUMPCAPACITY; // milliseconds
@@ -52,9 +51,9 @@ unsigned long secondsToSleep = 30; // default sleep half a minute
 double BatteryVoltage;
 int uptime;
 
-// RTC_DATA vars are preserved during the sleep
+#define ADCREADS 3
 RTC_DATA_ATTR bool batteryLow;
-RTC_DATA_ATTR uint16_t v[ADCREADS]; // 3 battery voltage readings
+RTC_DATA_ATTR uint16_t v[ADCREADS];
 
 RTC_DATA_ATTR unsigned long sleepSeconds;
 RTC_DATA_ATTR unsigned long awakeSeconds;
@@ -144,7 +143,7 @@ void myTimerEvent()
   uptime = millis() / 1000;
   bool canSleep = (uptime > 1);
   Serial.printf("up %d s.\n", uptime);
-  Blynk.virtualWrite(V5, makeTimeString(awakeSeconds + uptime));
+  Blynk.virtualWrite(V5, makeTimePeriodString(awakeSeconds + uptime));
   if (!batteryConnected()) {
     if (!batteryLow) {
       Serial.printf("Battery not connected. Not sleeping.\n");
@@ -179,32 +178,6 @@ void myTimerEvent()
   }
 }
 
-/**
- * zeropad time values
- */
-String zeroPad(int n) {
-  String retval = String(n);
-  if (n >= 10) {
-    return retval;
-  }
-  return String("0") + retval;
-}
-
-/**
- * make a readable time string
- */
-String makeTimeString(unsigned long units) {
-  int s = units % 60;
-  units = units / 60;
-  int m = units % 60;
-  units = units / 60;
-  int h = units % 24;
-  units = units / 24;
-  String timeString = String(units) + " days " + zeroPad(h) + ":" + zeroPad(m) + ":" + zeroPad(s);
-  Serial.printf("%d d, %d h, %d m, %d s -> %s\n", units, h, m , s, timeString.c_str());
-  return  timeString;
-}
-
 void setup() {
   Serial.begin(115200);
   Serial.printf("pump capacity %d L/H. Wateringamount %d L --> %d seconds on.\n", PUMPCAPACITY, WATERAMOUNT, wateringPeriod / 1000);
@@ -219,8 +192,8 @@ void setup() {
   }
   // get the state from the web
   Blynk.syncVirtual(V0, V1, V3);
-  Blynk.virtualWrite(V5, makeTimeString(awakeSeconds));
-  Blynk.virtualWrite(V6, makeTimeString(sleepSeconds));
+  Blynk.virtualWrite(V5, makeTimePeriodString(awakeSeconds));
+  Blynk.virtualWrite(V6, makeTimePeriodString(sleepSeconds));
   // myTimerEvent to be called every second
   timer.setInterval(1000L, myTimerEvent);
   if (atNight()) {
@@ -235,3 +208,4 @@ void loop() {
   Blynk.run();
   timer.run();
 }
+
