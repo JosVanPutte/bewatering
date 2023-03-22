@@ -28,6 +28,9 @@ String getTimeStr() {
  */
 bool atNight() {
   struct tm timeinfo;
+  if (!synced) {
+    getTimeStr();
+  }
   getAndCheckTime(timeinfo);
   return (timeinfo.tm_hour <= 5);
 }
