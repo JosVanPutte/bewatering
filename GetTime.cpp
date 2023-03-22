@@ -5,6 +5,32 @@
 
 bool synced;
 
+
+/**
+ * zeropad time values
+ */
+String zeroPad(int n) {
+  String retval = String(n);
+  if (n >= 10) {
+    return retval;
+  }
+  return String("0") + retval;
+}
+
+/**
+ * make a readable time string
+ */
+String makeTimePeriodString(unsigned long seconds) {
+  unsigned long units = seconds;
+  int s = units % 60; 
+  units = units / 60; // mins
+  int m = units % 60; 
+  units = units / 60; // hours
+  int h = units % 24; 
+  units = units / 24; // days
+  return String(units) + " d " + zeroPad(h) + ":" + zeroPad(m) + ":" + zeroPad(s);
+}
+
 void getAndCheckTime(struct tm& info) {
    if (!getLocalTime(&info)) {
     Serial.println("Failed to get time");
