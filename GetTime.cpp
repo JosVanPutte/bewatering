@@ -4,7 +4,7 @@
 #define CET 3600 // CET is one hour later than UTC
 
 bool synced;
-
+bool ok;
 
 /**
  * zeropad time values
@@ -33,7 +33,11 @@ String makeTimePeriodString(unsigned long seconds) {
 
 void getAndCheckTime(struct tm& info) {
    if (!getLocalTime(&info)) {
+    ok = false;
     Serial.println("Failed to get time");
+  } else {
+    // if time sync failed, the year is 1970...
+    ok = (info.tm_year > 2000);
   }
 }
 /**
@@ -42,7 +46,7 @@ void getAndCheckTime(struct tm& info) {
 String getTimeStr() {
   if (!synced) {
     configTime(0, CET, "nl.pool.ntp.org");
-    synced = true;
+    synced = ok;
   }
   struct tm timeinfo;
   getAndCheckTime(timeinfo);
@@ -58,5 +62,5 @@ bool atNight() {
     getTimeStr();
   }
   getAndCheckTime(timeinfo);
-  return (timeinfo.tm_hour <= 5);
+  return ok && (timeinfo.tm_hour <= 5 || timeinfo.tm_hour >= 22);
 }
