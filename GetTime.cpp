@@ -3,9 +3,6 @@
 
 #define CET 3600 // CET is one hour later than UTC
 
-bool synced;
-bool ok;
-
 /**
  * zeropad time values
  */
@@ -31,23 +28,37 @@ String makeTimePeriodString(unsigned long seconds) {
   return String(units) + " d " + zeroPad(h) + ":" + zeroPad(m) + ":" + zeroPad(s);
 }
 
-void getAndCheckTime(struct tm& info) {
-   if (!getLocalTime(&info)) {
-    ok = false;
-    Serial.println("Failed to get time");
-  } else {
-    // if time sync failed, the year is 1970...
-    ok = (info.tm_year > 2000);
+/**
+ * sync time with NTP
+ */
+void syncTime() {
+  struct timeval tm;
+
+  gettimeofday(&tm, NULL);
+  Serial.printf("before sync: seconds %d", tm.tv_sec);
+  configTime(0, CET, "nl.pool.ntp.org");
+  gettimeofday(&tm, NULL);
+  Serial.printf("after sync: seconds %d", tm.tv_sec);
+  settimeofday(&tm, NULL);
+}
+
+bool getAndCheckTime(struct tm& info) {
+   bool ok = getLocalTime(&info);
+   // if time not synced failed, the year is 1970...
+  Serial.printf("%sok. year %d\n", ok ? "" : "NOT ", info.tm_year);
+  ok = (info.tm_year > 0);
+  if (!ok) {
+    syncTime();
+    getLocalTime(&info);
+    Serial.printf("after sync: year %d\n", info.tm_year);
+    ok = (info.tm_year > 0);
   }
+  return ok;
 }
 /**
  * get the time in readable format
  */
 String getTimeStr() {
-  if (!synced) {
-    configTime(0, CET, "nl.pool.ntp.org");
-    synced = ok;
-  }
   struct tm timeinfo;
   getAndCheckTime(timeinfo);
   return String(asctime(&timeinfo));
@@ -58,9 +69,6 @@ String getTimeStr() {
  */
 bool atNight() {
   struct tm timeinfo;
-  if (!synced) {
-    getTimeStr();
-  }
-  getAndCheckTime(timeinfo);
+  bool ok = getAndCheckTime(timeinfo);
   return ok && (timeinfo.tm_hour <= 5 || timeinfo.tm_hour >= 22);
 }
