@@ -35,10 +35,10 @@ void syncTime() {
   struct timeval tm;
 
   gettimeofday(&tm, NULL);
-  Serial.printf("before sync: seconds %d", tm.tv_sec);
+  Serial.printf("before sync: seconds %d\n", tm.tv_sec);
   configTime(0, CET, "nl.pool.ntp.org");
   gettimeofday(&tm, NULL);
-  Serial.printf("after sync: seconds %d", tm.tv_sec);
+  Serial.printf("after sync: seconds %d\n", tm.tv_sec);
   settimeofday(&tm, NULL);
 }
 
@@ -46,12 +46,10 @@ bool getAndCheckTime(struct tm& info) {
    bool ok = getLocalTime(&info);
    // if time not synced failed, the year is 1970...
   Serial.printf("%sok. year %d\n", ok ? "" : "NOT ", info.tm_year);
-  ok = (info.tm_year > 0);
   if (!ok) {
     syncTime();
-    getLocalTime(&info);
-    Serial.printf("after sync: year %d\n", info.tm_year);
-    ok = (info.tm_year > 0);
+    ok = getLocalTime(&info);
+    Serial.printf("after sync: year %d %sok\n", info.tm_year, ok ? "" : "NOT ");
   }
   return ok;
 }
