@@ -1,7 +1,11 @@
 #include <Wifi.h>
 #include <time.h>
 
-#define CET 3600 // CET is one hour later than UTC
+#define HOUR_SECS 3600 // one hour in seconds
+#define CET HOUR_SECS  // CET is one hour later than UTC
+#define MARCH 2
+#define NOVEMBER 10
+#define SUNDAY 7
 
 /**
  * zeropad time values
@@ -29,24 +33,39 @@ String makeTimePeriodString(unsigned long seconds) {
 }
 
 /**
+ * summertime is toggled at the last sunday in march and november
+ */
+bool isSummerTime(struct tm& info) {
+  int month = info.tm_mon;
+  int day = info.tm_mday;
+  int weekday = info.tm_wday;
+  bool afterToggle = (day + (SUNDAY - (weekday % SUNDAY))) >= 31;
+  bool dst = (month >= MARCH) && (month < NOVEMBER);
+  if (MARCH != month  && NOVEMBER != month) {
+    Serial.printf("month %d ==> %s\n", month, dst ? "summer" : "winter");
+    return dst;
+  }
+  // now check if it is (past) the last sunday of the month
+  dst = (afterToggle && MARCH == month) || (!afterToggle && NOVEMBER == month);  
+  Serial.printf("%s day %d weekday %d (%s last sunday) ==> %s\n", MARCH == month ? "march" : "november", day, weekday, afterToggle ? "after" : "before", dst ? "summer" : "winter");
+  return dst;
+}
+/**
  * sync time with NTP
  */
 void syncTime() {
   struct timeval tm;
 
-  gettimeofday(&tm, NULL);
-  Serial.printf("before sync: seconds %d\n", tm.tv_sec);
   configTime(0, CET, "nl.pool.ntp.org");
   gettimeofday(&tm, NULL);
-  Serial.printf("after sync: seconds %d\n", tm.tv_sec);
   settimeofday(&tm, NULL);
 }
 
 bool getAndCheckTime(struct tm& info) {
-   bool ok = getLocalTime(&info);
-   // if time not synced failed, the year is 1970...
-  Serial.printf("%sok. year %d\n", ok ? "" : "NOT ", info.tm_year);
+  bool ok = getLocalTime(&info);
   if (!ok) {
+   // if time not synced failed, the year is (19)70...
+    Serial.printf("%sok. year %d\n", ok ? "" : "NOT ", info.tm_year);
     syncTime();
     ok = getLocalTime(&info);
     Serial.printf("after sync: year %d %sok\n", info.tm_year, ok ? "" : "NOT ");
@@ -63,10 +82,22 @@ String getTimeStr() {
 }
 
 /**
- * check if it is night
+ * check if it is night and return a good nights sleep
+ * in seconds
  */
-bool atNight() {
+unsigned long sleepDuration() {
   struct tm timeinfo;
   bool ok = getAndCheckTime(timeinfo);
-  return ok && (timeinfo.tm_hour <= 5 || timeinfo.tm_hour >= 22);
+  int hour = timeinfo.tm_hour;
+  if (ok) {
+    if (isSummerTime(timeinfo)) {
+      hour = hour + 1;
+    }
+    if (hour >= 22) {
+      // sleep until 5 AM
+      Serial.printf("it is %d so sleep for %d hours\n", hour, 5 + (24 - hour));
+      return 5 + (24-hour) * HOUR_SECS;   
+    }
+  }
+  return 30;
 }
