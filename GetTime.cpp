@@ -96,7 +96,7 @@ unsigned long sleepDuration() {
     if (hour >= 22) {
       // sleep until 5 AM
       Serial.printf("it is %d so sleep for %d hours\n", hour, 5 + (24 - hour));
-      return 5 + (24-hour) * HOUR_SECS;   
+      return (5 + 24 - hour) * HOUR_SECS;   
     }
   }
   return 30;
