@@ -17,16 +17,16 @@ typedef struct {
 #define HEK 1  // pump 1 is hek
 #define PUMPS 2 // nr of pumps
 PUMP pump[PUMPS] = {
-  { "muur", GPIO_NUM_0, 0 },
-  { "hek", GPIO_NUM_4, 0 }
+  { "muur", GPIO_NUM_2, 0 },
+  { "hek",  GPIO_NUM_4, 0 }
 };
 
 #define US_TO_S 1000000ULL
 
 #define WATERAMOUNT 1 // liter
 #define PUMPCAPACITY 240 // liter per hour
-#define HYSTERESIS 0.5 // volt
-#define LOWVOLTAGE 10.8
+#define HYSTERESIS 0.3 // volt
+#define LOWVOLTAGE 11.75 // 11.45 apprx 15% for lead battery. Way too low.
 
 /**
  * There is a voltage reducing resistor pair
@@ -43,13 +43,13 @@ PUMP pump[PUMPS] = {
 
 #define ADCVoltagePin 35  // GPIO 35 (Analog input, ADC1_CH7))
 
-const char* ssid = "------";
-const char* password = "*******";
+const char* ssid = "vanPutte";
+const char* password = "vanputte";
 
 unsigned long wateringPeriod = (WATERAMOUNT * 60 * 60 * 1000) / PUMPCAPACITY; // milliseconds
-unsigned long secondsToSleep = 30; // default sleep half a minute
 double BatteryVoltage;
 int uptime;
+unsigned long secondsToSleep;
 
 #define ADCREADS 3
 // RTC_DATA vars are preserved during the sleep
@@ -132,12 +132,7 @@ void updateVoltage() {
     }
   }
 }
-bool batteryConnected() {
-  for (int i = 0; i < ADCREADS; i++) {
-    if (v[i] == 0) return false;
-  }
-  return true;
-}
+
 // This function is called every second when awake.
 void myTimerEvent()
 {
@@ -145,12 +140,9 @@ void myTimerEvent()
   bool canSleep = (uptime > 1);
   Serial.printf("up %d s.\n", uptime);
   Blynk.virtualWrite(V5, makeTimePeriodString(awakeSeconds + uptime));
-  if (!batteryConnected()) {
-    if (!batteryLow) {
-      Serial.printf("Battery not connected. Not sleeping.\n");
-      batteryLow = true;
-    }
-    canSleep = false;
+  if (!batteryLow) {
+    Serial.printf("Battery not connected. Not sleeping.\n");
+    batteryLow = true;
   }
   updateVoltage();
   for (int p = 0; p < PUMPS; p++) {
@@ -197,10 +189,7 @@ void setup() {
   Blynk.virtualWrite(V6, makeTimePeriodString(sleepSeconds));
   // myTimerEvent to be called every second
   timer.setInterval(1000L, myTimerEvent);
-  if (atNight()) {
-    Serial.println("It is night so sleep for an hour.");
-    secondsToSleep = 3600; // an hour
-  }
+  secondsToSleep = sleepDuration();
   esp_sleep_enable_timer_wakeup(secondsToSleep * US_TO_S);
   Serial.printf("set wakeup timer for %d seconds.\n", secondsToSleep);
 }
