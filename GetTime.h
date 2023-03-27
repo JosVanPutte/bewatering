@@ -10,6 +10,7 @@ String getTimeStr();
 
 /**
  * check if it is night
- * say between midnight and 5 AM
+ * and sleep until 5 AM
+ * returns seconds to sleep
  */
-bool atNight();
+unsigned long sleepDuration();
