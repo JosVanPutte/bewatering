@@ -52,12 +52,12 @@ int uptime;
 unsigned long secondsToSleep;
 
 #define ADCREADS 3
-// RTC_DATA vars are preserved during the sleep
-RTC_DATA_ATTR bool batteryLow;
-RTC_DATA_ATTR uint16_t v[ADCREADS];
+// RTC_SLOW_ATTR vars are preserved during the sleep
+RTC_SLOW_ATTR bool batteryLow;
+RTC_SLOW_ATTR uint16_t v[ADCREADS];
 
-RTC_DATA_ATTR unsigned long sleepSeconds;
-RTC_DATA_ATTR unsigned long awakeSeconds;
+RTC_SLOW_ATTR unsigned long sleepSeconds;
+RTC_SLOW_ATTR unsigned long awakeSeconds;
 
 BlynkTimer timer;
 
@@ -140,10 +140,6 @@ void myTimerEvent()
   bool canSleep = (uptime > 1);
   Serial.printf("up %d s.\n", uptime);
   Blynk.virtualWrite(V5, makeTimePeriodString(awakeSeconds + uptime));
-  if (!batteryLow) {
-    Serial.printf("Battery not connected. Not sleeping.\n");
-    batteryLow = true;
-  }
   updateVoltage();
   for (int p = 0; p < PUMPS; p++) {
     unsigned long timeOn = pump[p].timeOn;
