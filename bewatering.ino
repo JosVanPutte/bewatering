@@ -7,15 +7,18 @@
 #include "ReadADC.h"
 #include "GetTime.h"
 
+#define VOLTAGEREADS 3
+
+#define PUMPS 2 // nr of pumps
+#define MUUR 0 // pump 0 is muur
+#define HEK 1  // pump 1 is hek
+
 typedef struct {
   String name; // the name
   gpio_num_t pin; // the gpio pin
   unsigned long timeOn; // the time switched on
 } PUMP;
 
-#define MUUR 0 // pump 0 is muur
-#define HEK 1  // pump 1 is hek
-#define PUMPS 2 // nr of pumps
 PUMP pump[PUMPS] = {
   { "muur", GPIO_NUM_2, 0 },
   { "hek",  GPIO_NUM_4, 0 }
@@ -41,23 +44,22 @@ PUMP pump[PUMPS] = {
 #define R2 26.5 // K Ohm
 #define CORRECTION (12.2/12.02) // voltmeter value / ESP 32 reported value
 
-#define ADCVoltagePin 35  // GPIO 35 (Analog input, ADC1_CH7))
+#define ADCVoltagePin   35  // GPIO 35
 
 const char* ssid = "vanPutte";
 const char* password = "vanputte";
 
 unsigned long wateringPeriod = (WATERAMOUNT * 60 * 60 * 1000) / PUMPCAPACITY; // milliseconds
 double BatteryVoltage;
-int uptime;
 unsigned long secondsToSleep;
+bool connected;
 
-#define ADCREADS 3
 // RTC_SLOW_ATTR vars are preserved during the sleep
-RTC_SLOW_ATTR bool batteryLow;
-RTC_SLOW_ATTR uint16_t v[ADCREADS];
+RTC_DATA_ATTR bool batteryLow;
+RTC_DATA_ATTR uint16_t v[VOLTAGEREADS];
 
-RTC_SLOW_ATTR unsigned long sleepSeconds;
-RTC_SLOW_ATTR unsigned long awakeSeconds;
+RTC_DATA_ATTR unsigned long sleepSeconds;
+RTC_DATA_ATTR unsigned long awakeSeconds;
 
 BlynkTimer timer;
 
@@ -95,6 +97,7 @@ BLYNK_WRITE(V3)
 // This function is called every time the device is connected to the Blynk.Cloud
 BLYNK_CONNECTED()
 {
+  connected = true;
   Serial.printf("Connected at %s", getTimeStr().c_str());
 }
 
@@ -116,9 +119,11 @@ void pumpOff(PUMP& p) {
 }
 
 void updateVoltage() {
-  double BatteryVoltage = ReadAverage(v, ADCREADS, analogRead(ADCVoltagePin)) * ((R1 + R2)/R2) * CORRECTION;
+  double BatteryVoltage = ReadAverage(v, VOLTAGEREADS, analogRead(ADCVoltagePin)) * ((R1 + R2)/R2) * CORRECTION;
   Serial.printf("Battery Voltage: %4.2f V (%slow)\n", BatteryVoltage, batteryLow ? "" : "not ");
-  Blynk.virtualWrite(V2, BatteryVoltage);
+  if (connected) {
+    Blynk.virtualWrite(V2, BatteryVoltage);
+  }
   if (batteryLow) {
     if (BatteryVoltage > LOWVOLTAGE + HYSTERESIS) {
       batteryLow = false;
@@ -128,7 +133,9 @@ void updateVoltage() {
     if (BatteryVoltage < LOWVOLTAGE - HYSTERESIS) {
       batteryLow = true;
       Serial.println("Battery low now");
-      Blynk.logEvent("low_battery");
+      if (connected) {
+        Blynk.logEvent("low_battery");
+      }
     }
   }
 }
@@ -136,10 +143,12 @@ void updateVoltage() {
 // This function is called every second when awake.
 void myTimerEvent()
 {
-  uptime = millis() / 1000;
+  int uptime = millis() / 1000;
   bool canSleep = (uptime > 1);
   Serial.printf("up %d s.\n", uptime);
-  Blynk.virtualWrite(V5, makeTimePeriodString(awakeSeconds + uptime));
+  if (connected) {
+    Blynk.virtualWrite(V5, makeTimePeriodString(awakeSeconds + uptime));
+  }
   updateVoltage();
   for (int p = 0; p < PUMPS; p++) {
     unsigned long timeOn = pump[p].timeOn;
@@ -150,8 +159,10 @@ void myTimerEvent()
       if (millis() > timeOn + wateringPeriod) {
         // switch off pump
         pumpOff(pump[p]);
-        // sync state to web
-        Blynk.virtualWrite(p, 0);
+        if (connected) {
+          // sync state to web
+          Blynk.virtualWrite(p, 0);
+        }
       }
     }
   }
@@ -159,12 +170,46 @@ void myTimerEvent()
     awakeSeconds += millis() / 1000;
     sleepSeconds += secondsToSleep;
     Serial.printf("Going to sleep now for %d sec\n", secondsToSleep);
+    pumpsDisable();
     Serial.flush();
-    Blynk.virtualWrite(V4, 0);
+    if (connected) {
+      Blynk.virtualWrite(V4, 0);
+    }
     digitalWrite(LED_BUILTIN, LOW);
     delay(200);
     esp_deep_sleep_start();
   }
+}
+void pumpsEnable() {
+  for (int p = 0; p < PUMPS; p++) {
+    // before setting the pinmode set the output high (low is active)
+    digitalWrite(pump[p].pin, HIGH);
+    pinMode(pump[p].pin, OUTPUT);
+  }
+}
+void pumpsDisable() {
+  for (int p = 0; p < PUMPS; p++) {
+    // before setting the pinmode set the output high (low is active)
+    digitalWrite(pump[p].pin, HIGH);
+    pinMode(pump[p].pin, INPUT);
+  }
+}
+
+/**
+ * try connect to the WiFi for 3 seconds
+ */
+bool tryConnect() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  for (int i=0; i<5; i++) {
+    BlynkDelay(500);
+    if (WiFi.status() == WL_CONNECTED) {
+      break;
+    }
+  }
+  connected = WiFi.status() == WL_CONNECTED;
+  Serial.printf("%sconnected to the WiFi.\n", connected ? "" : "NOT ");
+  return connected;
 }
 
 void setup() {
@@ -172,17 +217,15 @@ void setup() {
   Serial.printf("pump capacity %d L/H. Wateringamount %d L --> %d seconds on.\n", PUMPCAPACITY, WATERAMOUNT, wateringPeriod / 1000);
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
-  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
-  Blynk.virtualWrite(V4, 1);
-  for (int p = 0; p < PUMPS; p++) {
-    // before setting the pinmode set the output high (low is active)
-    digitalWrite(pump[p].pin, HIGH);
-    pinMode(pump[p].pin, OUTPUT);
+  pumpsEnable();
+  if (tryConnect()) {
+    Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
+    Blynk.virtualWrite(V4, 1);
+    // get the state from the web
+    Blynk.syncVirtual(V0, V1, V3);
+    Blynk.virtualWrite(V5, makeTimePeriodString(awakeSeconds));
+    Blynk.virtualWrite(V6, makeTimePeriodString(sleepSeconds));
   }
-  // get the state from the web
-  Blynk.syncVirtual(V0, V1, V3);
-  Blynk.virtualWrite(V5, makeTimePeriodString(awakeSeconds));
-  Blynk.virtualWrite(V6, makeTimePeriodString(sleepSeconds));
   // myTimerEvent to be called every second
   timer.setInterval(1000L, myTimerEvent);
   secondsToSleep = sleepDuration();
