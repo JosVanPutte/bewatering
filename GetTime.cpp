@@ -1,5 +1,6 @@
 #include <Wifi.h>
 #include <time.h>
+#include "Sunrise.h"
 
 #define HOUR_SECS 3600 // one hour in seconds
 #define CET HOUR_SECS  // CET is one hour later than UTC
@@ -35,7 +36,7 @@ String makeTimePeriodString(unsigned long seconds) {
 /**
  * summertime is toggled at the last sunday in march and november
  */
-bool isSummerTime(struct tm& info) {
+bool isSummerTime(const struct tm& info) {
   int month = info.tm_mon;
   int day = info.tm_mday;
   int weekday = info.tm_wday;
@@ -50,6 +51,8 @@ bool isSummerTime(struct tm& info) {
   Serial.printf("%s day %d weekday %d (%s last sunday) ==> %s\n", MARCH == month ? "march" : "november", day, weekday, afterToggle ? "after" : "before", dst ? "summer" : "winter");
   return dst;
 }
+
+
 /**
  * sync time with NTP
  */
@@ -90,13 +93,14 @@ unsigned long sleepDuration() {
   bool ok = getAndCheckTime(timeinfo);
   int hour = timeinfo.tm_hour;
   if (ok) {
-    if (isSummerTime(timeinfo)) {
-      hour = hour + 1;
-    }
-    if (hour >= 22) {
-      // sleep until 5 AM
-      Serial.printf("it is %d so sleep for %d hours\n", hour, 5 + (24 - hour));
-      return (5 + 24 - hour) * HOUR_SECS;   
+    bool summer = isSummerTime(timeinfo);
+    bool dark = isSunDown(timeinfo, summer);
+    int secsToSunUp = secondsToSunrise(timeinfo, summer);
+    if (summer) { hour = hour + 1; }    
+    if (dark) {
+      // sleep until sunrise
+      Serial.printf("it is dark (%d h) so sleep for %d hours %d min until sunrise\n", hour, secsToSunUp / 3600, (secsToSunUp % 3600) / 60);
+      return secsToSunUp;   
     }
   }
   return 30;
