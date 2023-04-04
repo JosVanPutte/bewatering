@@ -1,7 +1,7 @@
 /**
  * make a string for a period of seconds
  */
-String makeTimePeriodString(unsigned long seconds);
+String timePeriodStringToSunup();
 
 /**
  * get the time in readable format
