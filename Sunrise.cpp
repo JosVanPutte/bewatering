@@ -76,10 +76,11 @@ double horizontalAzimutCorrection(double declin) {
  */
 bool isSunDown(const struct tm& now, bool summer) {
   int sundown = (int) (720.0 + 4* (LONGITUDE+horizontalAzimutCorrection(declination(now))) - eqTime(now));
-  int sunsetHour = sundown/60 + CET + (summer ? 1 : 0);
+  int hour = now.tm_hour;
+  int sunsetHour = sundown/60 + CET;
   int sunsetMinute = sundown % 60;
-  Serial.printf("today sundown at %2d:%2d\n", sunsetHour, sunsetMinute);
-  return (now.tm_hour > sunsetHour) || ((now.tm_hour == sunsetHour)&&(now.tm_min >= sunsetMinute));
+  Serial.printf("it is %2d:%2d. Sundown at %2d:%2d (in %d hours)\n", hour + (summer ? 1 : 0), now.tm_min, sunsetHour + (summer ? 1 : 0), sunsetMinute, sunsetHour - hour);
+  return (hour > sunsetHour) || ((hour == sunsetHour)&&(now.tm_min >= sunsetMinute));
 }
 
 /**
@@ -87,9 +88,9 @@ bool isSunDown(const struct tm& now, bool summer) {
  */ 
 int secondsToSunrise(const struct tm& now, bool summer) {
   int sunup = (int) (720.0 + 4* (LONGITUDE-horizontalAzimutCorrection(declination(now))) - eqTime(now));
-  int sunupHour = sunup/60 + CET + (summer ? 1 : 0);
+  int hour = now.tm_hour;
+  int sunupHour = sunup/60 + CET;
   int sunupMinute = sunup % 60;
-  Serial.printf("today sunup at %2d:%2d\n", sunupHour, sunupMinute);
-  if (sunupMinute > now.tm_min) { sunupHour -= 1; }
-  return (((now.tm_hour - sunupHour) * 60 + (now.tm_min - sunupMinute))) * 60;
+  Serial.printf("it is %2d:%2d. Sunup at %02d:%02d (in %d hours)\n", hour + (summer ? 1 : 0), now.tm_min, sunupHour + (summer ? 1 : 0), sunupMinute, sunupHour + 24 - hour);
+  return ((sunupHour + 24 - hour) * 60 + (sunupMinute - now.tm_min)) * 60;
 }
