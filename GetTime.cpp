@@ -8,6 +8,8 @@
 #define NOVEMBER 10
 #define SUNDAY 7
 
+bool synced;
+
 /**
  * zeropad time values
  */
@@ -20,17 +22,14 @@ String zeroPad(int n) {
 }
 
 /**
- * make a readable time string
+ * sync time with NTP
  */
-String makeTimePeriodString(unsigned long seconds) {
-  unsigned long units = seconds;
-  int s = units % 60; 
-  units = units / 60; // mins
-  int m = units % 60; 
-  units = units / 60; // hours
-  int h = units % 24; 
-  units = units / 24; // days
-  return String(units) + " d " + zeroPad(h) + ":" + zeroPad(m) + ":" + zeroPad(s);
+void syncTime() {
+  struct timeval tm;
+
+  configTime(0, CET, "nl.pool.ntp.org");
+  gettimeofday(&tm, NULL);
+  settimeofday(&tm, NULL);
 }
 
 /**
@@ -52,36 +51,53 @@ bool isSummerTime(const struct tm& info) {
   return dst;
 }
 
-
-/**
- * sync time with NTP
- */
-void syncTime() {
-  struct timeval tm;
-
-  configTime(0, CET, "nl.pool.ntp.org");
-  gettimeofday(&tm, NULL);
-  settimeofday(&tm, NULL);
-}
-
 bool getAndCheckTime(struct tm& info) {
   bool ok = getLocalTime(&info);
-  if (!ok) {
-   // if time not synced failed, the year is (19)70...
-    Serial.printf("%sok. year %d\n", ok ? "" : "NOT ", info.tm_year);
+  if (!synced && (WiFi.status() == WL_CONNECTED)) {
+   // sync time
     syncTime();
     ok = getLocalTime(&info);
     Serial.printf("after sync: year %d %sok\n", info.tm_year, ok ? "" : "NOT ");
+    synced = ok;
   }
   return ok;
 }
+
+unsigned long secondsToDisplay() {
+  struct tm timeinfo;
+  if (getAndCheckTime(timeinfo)) {
+    bool summer = isSummerTime(timeinfo);
+    int secsToSunUp = secondsToSunrise(timeinfo, summer);
+    return secsToSunUp;
+  }
+  return 0;
+}
+/**
+ * make a readable time string
+ */
+String timePeriodStringToSunup() {
+  unsigned long units = secondsToDisplay();
+  int s = units % 60; 
+  units = units / 60; // mins
+  int m = units % 60; 
+  units = units / 60; // hours
+  int h = units % 24; 
+  return zeroPad(h) + ":" + zeroPad(m) + ":" + zeroPad(s);
+}
+
 /**
  * get the time in readable format
  */
 String getTimeStr() {
+  char buf[20];
+  char *timestr = buf;
   struct tm timeinfo;
   getAndCheckTime(timeinfo);
-  return String(asctime(&timeinfo));
+  if (isSummerTime(timeinfo)) {
+    ++timeinfo.tm_hour;
+  }
+  strftime(timestr, 20, "%D %R", &timeinfo);
+  return String(timestr);
 }
 
 /**
@@ -99,7 +115,7 @@ unsigned long sleepDuration() {
     if (summer) { hour = hour + 1; }    
     if (dark) {
       // sleep until sunrise
-      Serial.printf("it is dark (%d h) so sleep for %d hours %d min until sunrise\n", hour, secsToSunUp / 3600, (secsToSunUp % 3600) / 60);
+      Serial.printf("it is dark (%d h) so sleep for %d hours %d min until sunrise\n", hour, secsToSunUp / 3600, (secsToSunUp % 3600)/60);
       return secsToSunUp;   
     }
   }
