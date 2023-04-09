@@ -1,16 +1,16 @@
 /**
- * make a string for a period of seconds
+ * make a string for a period of seconds to sunup
  */
 String timePeriodStringToSunup();
 
 /**
- * get the time in readable format
+ * get the time
  */
 String getTimeStr();
 
 /**
  * check if it is night
- * and sleep until 5 AM
+ * and sleep until dawn
  * returns seconds to sleep
  */
 unsigned long sleepDuration();
