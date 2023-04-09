@@ -72,18 +72,6 @@ double horizontalAzimutCorrection(double declin) {
 }
 
 /**
- * is it bedtime ?
- */
-bool isSunDown(const struct tm& now, bool summer) {
-  int sundown = (int) (720.0 + 4* (LONGITUDE+horizontalAzimutCorrection(declination(now))) - eqTime(now));
-  int hour = now.tm_hour;
-  int sunsetHour = sundown/60 + CET;
-  int sunsetMinute = sundown % 60;
-  Serial.printf("it is %2d:%2d. Sundown at %2d:%2d (in %d hours)\n", hour + (summer ? 1 : 0), now.tm_min, sunsetHour + (summer ? 1 : 0), sunsetMinute, sunsetHour - hour);
-  return (hour > sunsetHour) || ((hour == sunsetHour)&&(now.tm_min >= sunsetMinute));
-}
-
-/**
  * the time the sun rose today is almost the same as when it will rise tomorrow..
  */ 
 int secondsToSunrise(const struct tm& now, bool summer) {
@@ -93,4 +81,26 @@ int secondsToSunrise(const struct tm& now, bool summer) {
   int sunupMinute = sunup % 60;
   Serial.printf("it is %2d:%2d. Sunup at %02d:%02d (in %d hours)\n", hour + (summer ? 1 : 0), now.tm_min, sunupHour + (summer ? 1 : 0), sunupMinute, sunupHour + 24 - hour);
   return ((sunupHour + 24 - hour) * 60 + (sunupMinute - now.tm_min)) * 60;
+}
+/**
+ * seconds to sunset
+ */
+int secondsToSunset(const struct tm& now, bool summer) {
+  int sundown = (int) (720.0 + 4* (LONGITUDE+horizontalAzimutCorrection(declination(now))) - eqTime(now));
+  int hour = now.tm_hour;
+  int sunsetHour = sundown/60 + CET;
+  int sunsetMinute = sundown % 60;
+  Serial.printf("it is %2d:%2d. Sundown at %2d:%2d (in %d hours)\n", hour + (summer ? 1 : 0), now.tm_min, sunsetHour + (summer ? 1 : 0), sunsetMinute, sunsetHour - hour);
+  return ((sunsetHour - hour) * 60 + (sunsetMinute - now.tm_min)) * 60;
+}
+/**
+ * is it bedtime ?
+ */
+bool isSunDown(const struct tm& now, bool summer) {
+  int secondsToDark = secondsToSunset(now, summer);
+  int hour = now.tm_hour;
+  int sunsetMinute = secondsToDark / 60;
+  int sunsetHour = sunsetMinute / 60;
+  sunsetMinute = sunsetMinute % 60;
+  return (hour > sunsetHour) || ((hour == sunsetHour)&&(now.tm_min >= sunsetMinute));
 }
