@@ -98,9 +98,5 @@ int secondsToSunset(const struct tm& now, bool summer) {
  */
 bool isSunDown(const struct tm& now, bool summer) {
   int secondsToDark = secondsToSunset(now, summer);
-  int hour = now.tm_hour;
-  int sunsetMinute = secondsToDark / 60;
-  int sunsetHour = sunsetMinute / 60;
-  sunsetMinute = sunsetMinute % 60;
-  return (hour > sunsetHour) || ((hour == sunsetHour)&&(now.tm_min >= sunsetMinute));
+  return secondsToDark <= 0;
 }
