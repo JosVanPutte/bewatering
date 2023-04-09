@@ -37,16 +37,16 @@ typedef struct {
 } SENSOR;
 
 SENSOR sensor[PLACES] = {
-  { "wall", GPIO_NUM_32, {0}, V7, 2.15, 1.12, false},
-  { "rail",  GPIO_NUM_34, {0}, V8, 2.15, 1.28, false}
+  { "wall", GPIO_NUM_32, {0}, V7, 2.15, 0.58, false},
+  { "rail",  GPIO_NUM_34, {0}, V8, 2.18, 1.38, false}
 };
 
 #define US_TO_S 1000000ULL
 
 #define WATERAMOUNT 1 // liter
 #define PUMPCAPACITY 240 // liter per hour
-#define HYSTERESIS 0.3 // volt
-#define LOWVOLTAGE 12.0 // 11.7 apprx 20% for lead battery. Way too low.
+#define HYSTERESIS 0.2 // volt
+#define LOWVOLTAGE 12.1 // 11.9 apprx 30% for lead battery.
 /**
  * There is a voltage reducing resistor pair
  * from the 12 V battery to gnd
@@ -70,7 +70,7 @@ double BatteryVoltage;
 unsigned long secondsToSleep;
 bool connected;
 
-// RTC_DATA_ATTR vars are preserved during the sleep
+// RTC_SLOW_ATTR vars are preserved during the sleep
 RTC_DATA_ATTR bool batteryLow;
 RTC_DATA_ATTR uint16_t v[VOLTAGEREADS];
 
@@ -117,7 +117,7 @@ BLYNK_CONNECTED()
 switch pump on
 */
 void pumpOn(PUMP& p) {
-  if (!p.timeOn) {  
+  if (!p.timeOn && !batteryLow) {  
     Serial.printf("pump %s on\n", p.name.c_str());
     digitalWrite(p.pin, LOW);
     p.timeOn = millis();
@@ -168,9 +168,10 @@ void updateVoltage() {
  * voltage goes down when wet..
  */
 int moistLevel(SENSOR& s) {
-    uint16_t value = analogRead(s.pin);
-    double voltage = ReadAverage(s.value, SENSORREADS, value);
-    double percentage = 100 - (100.0 * (voltage - s.wetValue) / (s.dryValue - s.wetValue));
+    double voltage = ReadAverage(s.value, SENSORREADS, analogRead(s.pin));
+    double range = (s.dryValue - s.wetValue);
+    double value = voltage - s.wetValue;
+    double percentage = 100.0 * (1.0 - (value / range));
     return percentage;  
 }
 
@@ -181,8 +182,12 @@ void updateSensors() {
   for (int p = 0; p < PLACES; p++) {
     SENSOR s = sensor[p];
     int level = moistLevel(s);
-    bool dry = (level < 5);
-    Serial.printf("sensor %s %d\% -> (%s dry)\n", s.name.c_str(), level, dry ? "too" : "not");
+    if (level > 100) {
+      level = 100;
+    }
+    bool invalid = level < 0;
+    bool dry = (level < 2) && (!invalid);
+    Serial.printf("sensor %s %d\% -> (%s%s dry)\n", s.name.c_str(), level, invalid ? "invalid so " : "", dry ? "too" : "not");
     if (connected) {
       Blynk.virtualWrite(s.virtualPin, level);
       int vpin = pump[p].virtualPin;
