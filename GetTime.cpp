@@ -63,26 +63,15 @@ bool getAndCheckTime(struct tm& info) {
   return ok;
 }
 
-unsigned long secondsToDisplay() {
-  struct tm timeinfo;
-  if (getAndCheckTime(timeinfo)) {
-    bool summer = isSummerTime(timeinfo);
-    int secsToSunUp = secondsToSunrise(timeinfo, summer);
-    return secsToSunUp;
-  }
-  return 0;
-}
 /**
  * make a readable time string
  */
-String timePeriodStringToSunup() {
-  unsigned long units = secondsToDisplay();
-  int s = units % 60; 
-  units = units / 60; // mins
+String timePeriodString(unsigned long seconds) {
+  unsigned long units = seconds/60; // mins
   int m = units % 60; 
   units = units / 60; // hours
   int h = units % 24; 
-  return zeroPad(h) + ":" + zeroPad(m) + ":" + zeroPad(s);
+  return zeroPad(h) + ":" + zeroPad(m);
 }
 
 /**
@@ -96,10 +85,14 @@ String getTimeStr() {
   if (isSummerTime(timeinfo)) {
     ++timeinfo.tm_hour;
   }
-  strftime(timestr, 20, "%D %R", &timeinfo);
-  return String(timestr);
+  strftime(timestr, 20, "%R", &timeinfo);
+  return String(timestr) + " set " + timePeriodString(secondsToSunset(timeinfo, false));
 }
-
+String timePeriodStringToSunup() {
+  struct tm timeinfo;
+  getAndCheckTime(timeinfo);
+  return String("dawn in ") + timePeriodString(secondsToSunrise(timeinfo, isSummerTime(timeinfo)));
+}
 /**
  * check if it is night and return a good nights sleep
  * in seconds
